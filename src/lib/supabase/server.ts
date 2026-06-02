@@ -13,10 +13,14 @@ export async function createServerSupabase() {
           return cookieStore.get(name)?.value
         },
         set(name: string, value: string, options: CookieOptions) {
-          try { cookieStore.set({ name, value, ...options }) } catch (error) {}
+          try { cookieStore.set({ name, value, ...options }) } catch (error) {
+            console.error('Failed to set cookie:', name, error)
+          }
         },
         remove(name: string, options: CookieOptions) {
-          try { cookieStore.set({ name, value: '', ...options }) } catch (error) {}
+          try { cookieStore.set({ name, value: '', ...options }) } catch (error) {
+            console.error('Failed to remove cookie:', name, error)
+          }
         },
       },
     }
