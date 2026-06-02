@@ -24,7 +24,13 @@ export async function middleware(request: NextRequest) {
     }
   )
 
-  const { data: { user } } = await supabase.auth.getUser()
+  let user = null
+  try {
+    const { data } = await supabase.auth.getUser()
+    user = data.user
+  } catch (err) {
+    console.error('Middleware auth error:', err)
+  }
 
   const isCustomerRoute = request.nextUrl.pathname.startsWith('/restaurant') ||
     request.nextUrl.pathname.startsWith('/cart') ||
