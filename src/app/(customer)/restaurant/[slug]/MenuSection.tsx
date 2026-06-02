@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { MenuItem } from '@/components/customer/MenuItem'
 import { Button } from '@/components/ui/button'
+import { useCart } from '@/hooks/useCart'
 import type { Category, Product } from '@/types'
 
 interface MenuSectionProps {
@@ -15,14 +16,14 @@ export function MenuSection({ categories, products, restaurantId }: MenuSectionP
   const [selectedCategory, setSelectedCategory] = useState<string | null>(
     categories[0]?.id || null
   )
+  const { addItem } = useCart()
 
   const filteredProducts = selectedCategory
     ? products.filter((p) => p.category_id === selectedCategory)
     : products
 
   const handleAddToCart = (product: Product) => {
-    // TODO: Will be connected in Task 6 (Cart System)
-    console.log('Add to cart:', product)
+    addItem(product)
   }
 
   return (
