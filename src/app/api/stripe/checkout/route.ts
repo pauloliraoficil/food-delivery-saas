@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { stripe } from '@/lib/stripe'
+import { getStripe } from '@/lib/stripe'
 
 export async function POST(request: NextRequest) {
   const supabase = await createServerSupabase()
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
   await supabase.from('order_items').insert(orderItems)
 
   if (paymentMethod === 'card' || paymentMethod === 'pix') {
-    const session = await stripe.checkout.sessions.create({
+    const session = await getStripe().checkout.sessions.create({
       payment_method_types: paymentMethod === 'pix' ? ['pix'] : ['card'],
       line_items: items.map((item: any) => ({
         price_data: {
