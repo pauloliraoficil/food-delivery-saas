@@ -6,22 +6,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 export default function SetupPage() {
   const [sql, setSql] = useState('')
-  const [copied, setCopied] = useState(false)
-  const [status, setStatus] = useState<'idle' | 'checking' | 'ready' | 'error'>('idle')
+  const [seedSql, setSeedSql] = useState('')
+  const [copied, setCopied] = useState<'schema' | 'seed' | null>(null)
+  const [status, setStatus] = useState<'idle' | 'checking' | 'ready' | 'empty'>('idle')
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
+  const [restaurantCount, setRestaurantCount] = useState(0)
 
   useEffect(() => {
-    fetch('/api/setup/sql')
-      .then(r => r.text())
-      .then(text => {
-        setSql(text)
-        setLoading(false)
-      })
-      .catch(() => {
-        setMessage('Erro ao carregar SQL')
-        setLoading(false)
-      })
+    Promise.all([
+      fetch('/api/setup/sql').then(r => r.text()),
+      fetch('/api/setup/seed').then(r => r.text())
+    ]).then(([schema, seed]) => {
+      setSql(schema)
+      setSeedSql(seed)
+      setLoading(false)
+    }).catch(() => {
+      setMessage('Erro ao carregar SQL')
+      setLoading(false)
+    })
   }, [])
 
   async function checkDatabase() {
@@ -31,39 +34,49 @@ export default function SetupPage() {
       const r = await fetch('/api/setup/status')
       const data = await r.json()
       if (data.ready) {
-        setStatus('ready')
-        setMessage('✅ Banco de dados configurado e funcionando!')
+        const countR = await fetch('/api/setup/status?table=restaurants')
+        const countData = await countR.json()
+        setRestaurantCount(countData.count || 0)
+        if (countData.count > 0) {
+          setStatus('ready')
+          setMessage('✅ Banco de dados configurado e populado!')
+        } else {
+          setStatus('empty')
+          setMessage('✅ Tabelas criadas! Agora popule com dados de exemplo.')
+        }
       } else {
-        setStatus('error')
+        setStatus('idle')
         setMessage('⚠️ Tabelas não encontradas. Siga os passos abaixo.')
       }
     } catch (err) {
-      setStatus('error')
+      setStatus('idle')
       setMessage('Erro ao verificar banco de dados.')
     }
   }
 
-  async function copySql() {
+  async function copyToClipboard(text: string, type: 'schema' | 'seed') {
     try {
-      await navigator.clipboard.writeText(sql)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard.writeText(text)
+      setCopied(type)
+      setTimeout(() => setCopied(null), 2000)
     } catch (err) {
-      const textarea = document.getElementById('sql-textarea') as HTMLTextAreaElement
+      const textarea = type === 'schema'
+        ? document.getElementById('sql-textarea') as HTMLTextAreaElement
+        : document.getElementById('seed-textarea') as HTMLTextAreaElement
       if (textarea) {
         textarea.select()
         document.execCommand('copy')
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
+        setCopied(type)
+        setTimeout(() => setCopied(null), 2000)
       }
     }
   }
 
-  function selectAll() {
-    const textarea = document.getElementById('sql-textarea') as HTMLTextAreaElement
+  function selectAll(id: string) {
+    const textarea = document.getElementById(id) as HTMLTextAreaElement
     if (textarea) {
+      textarea.focus()
       textarea.select()
-      textarea.setSelectionRange(0, 99999)
     }
   }
 
@@ -88,22 +101,22 @@ export default function SetupPage() {
             </Button>
             {message && (
               <div className={`p-3 rounded-md text-sm ${
-                status === 'ready' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'
+                status === 'ready' ? 'bg-green-50 text-green-700' :
+                status === 'empty' ? 'bg-blue-50 text-blue-700' :
+                'bg-amber-50 text-amber-700'
               }`}>
                 {message}
+                {status === 'ready' && ` (${restaurantCount} restaurantes cadastrados)`}
               </div>
             )}
           </CardContent>
         </Card>
 
-        {status !== 'ready' && (
+        {status === 'idle' && (
           <>
             <Card>
               <CardHeader>
                 <CardTitle>📋 Passo 1: Abrir o SQL Editor do Supabase</CardTitle>
-                <CardDescription>
-                  Clique no botão abaixo para abrir o editor SQL
-                </CardDescription>
               </CardHeader>
               <CardContent>
                 <a
@@ -119,74 +132,70 @@ export default function SetupPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>📋 Passo 2: Copiar o SQL</CardTitle>
+                <CardTitle>📋 Passo 2: Executar Schema</CardTitle>
                 <CardDescription>
-                  Selecione TODO o texto abaixo (Ctrl+A) e copie (Ctrl+C)
+                  Selecione TODO o texto abaixo, copie, cole no SQL Editor e clique Run
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 {loading ? (
-                  <p className="text-center text-gray-500 py-4">Carregando SQL...</p>
+                  <p className="text-center text-gray-500 py-4">Carregando...</p>
                 ) : (
                   <>
                     <textarea
                       id="sql-textarea"
                       readOnly
                       value={sql}
-                      onClick={selectAll}
-                      className="w-full h-64 p-3 text-xs font-mono border border-gray-300 rounded-md bg-gray-50 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      placeholder="SQL será carregado aqui..."
+                      onClick={() => selectAll('sql-textarea')}
+                      className="w-full h-48 p-3 text-xs font-mono border border-gray-300 rounded-md bg-gray-50 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500"
                     />
-                    <p className="text-xs text-gray-500">
-                      💡 Clique no textarea acima para selecionar todo o conteúdo
-                    </p>
                     <div className="flex gap-2">
-                      <Button onClick={selectAll} variant="outline" className="flex-1">
-                        📝 Selecionar Tudo
+                      <Button onClick={() => selectAll('sql-textarea')} variant="outline" className="flex-1">
+                        📝 Selecionar
                       </Button>
-                      <Button onClick={copySql} className="flex-1 bg-orange-500 hover:bg-orange-600">
-                        {copied ? '✅ Copiado!' : '📋 Copiar SQL'}
+                      <Button onClick={() => copyToClipboard(sql, 'schema')} className="flex-1 bg-orange-500 hover:bg-orange-600">
+                        {copied === 'schema' ? '✅ Copiado!' : '📋 Copiar'}
                       </Button>
                     </div>
                   </>
                 )}
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>▶️ Passo 3: Colar e Executar no Supabase</CardTitle>
-                <CardDescription>
-                  No SQL Editor que você abriu no Passo 1:
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="bg-gray-50 p-4 rounded-md text-sm space-y-2">
-                  <p>1. Clique no editor de texto vazio</p>
-                  <p>2. Cole com <strong>Ctrl+V</strong></p>
-                  <p>3. Clique no botão <strong>▶ Run</strong> (ou pressione <strong>Ctrl+Enter</strong>)</p>
-                  <p>4. Aguarde ~10 segundos para a execução</p>
-                </div>
-                <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-800">
-                  ⚠️ <strong>Importante:</strong> Cole apenas o CONTEÚDO do SQL (CREATE TABLE, etc.), não o nome do arquivo.
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>✅ Passo 4: Verificar</CardTitle>
-                <CardDescription>
-                  Volte aqui e clique em "Verificar" novamente
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Button onClick={checkDatabase} variant="outline" className="w-full">
-                  🔄 Verificar Novamente
-                </Button>
-              </CardContent>
-            </Card>
           </>
+        )}
+
+        {status === 'empty' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>📋 Passo 3: Popular com Dados de Exemplo</CardTitle>
+              <CardDescription>
+                Execute este SQL para criar 6 restaurantes, categorias e produtos de demonstração
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {loading ? (
+                <p className="text-center text-gray-500 py-4">Carregando...</p>
+              ) : (
+                <>
+                  <textarea
+                    id="seed-textarea"
+                    readOnly
+                    value={seedSql}
+                    onClick={() => selectAll('seed-textarea')}
+                    className="w-full h-48 p-3 text-xs font-mono border border-gray-300 rounded-md bg-gray-50 resize-none focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                  <div className="flex gap-2">
+                    <Button onClick={() => selectAll('seed-textarea')} variant="outline" className="flex-1">
+                      📝 Selecionar
+                    </Button>
+                    <Button onClick={() => copyToClipboard(seedSql, 'seed')} className="flex-1 bg-orange-500 hover:bg-orange-600">
+                      {copied === 'seed' ? '✅ Copiado!' : '📋 Copiar'}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
         )}
 
         {status === 'ready' && (
@@ -194,9 +203,20 @@ export default function SetupPage() {
             <CardContent className="pt-6 text-center space-y-4">
               <p className="text-4xl">🎉</p>
               <p className="text-lg font-semibold">Tudo pronto!</p>
+              <p className="text-sm text-gray-600">{restaurantCount} restaurantes cadastrados</p>
               <a href="/" className="inline-block w-full px-4 py-3 bg-orange-500 text-white rounded-md hover:bg-orange-600">
                 🚀 Ir para o App
               </a>
+            </CardContent>
+          </Card>
+        )}
+
+        {(status === 'idle' || status === 'empty') && (
+          <Card>
+            <CardContent className="pt-6">
+              <Button onClick={checkDatabase} variant="outline" className="w-full">
+                🔄 Verificar Novamente
+              </Button>
             </CardContent>
           </Card>
         )}
