@@ -1,7 +1,7 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const response = NextResponse.next({ request: { headers: request.headers } })
 
   const supabase = createServerClient(
@@ -29,7 +29,7 @@ export async function middleware(request: NextRequest) {
     const { data } = await supabase.auth.getUser()
     user = data.user
   } catch (err) {
-    console.error('Middleware auth error:', err)
+    console.error('Proxy auth error:', err)
   }
 
   const isCustomerRoute = request.nextUrl.pathname.startsWith('/restaurant') ||
